@@ -195,7 +195,7 @@ app.get('/dashboard', requireAuth, async (c) => {
     <div class="card"><strong>Your MCP key</strong>
       <pre>${esc(u.api_key)}</pre>
       <form method="POST" action="/regenerate-key" onsubmit="return confirm('Regenerate key? Old key stops working.')"><button class="btn ghost" type="submit">Regenerate key</button></form>
-      <p class="muted" style="margin-top:10px">Add to your MCP client (Claude, Cursor, …):</p>
+      <p class="muted" style="margin-top:10px"><strong>Cursor</strong> & clients with native Streamable HTTP:</p>
       <pre>{
   "mcpServers": {
     "agentping": {
@@ -204,6 +204,16 @@ app.get('/dashboard', requireAuth, async (c) => {
     }
   }
 }</pre>
+      <p class="muted" style="margin-top:10px"><strong>Cline, Claude Desktop</strong> & others (stdio bridge, needs Node.js — recommended for maximum compatibility):</p>
+      <pre>{
+  "mcpServers": {
+    "agentping": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "${esc(c.env.APP_URL)}/mcp", "--header", "Authorization: Bearer ${esc(u.api_key)}"]
+    }
+  }
+}</pre>
+      <p class="muted" style="font-size:13px">See the <a href="/docs">docs</a> for per-client steps.</p>
     </div>
     <div class="card" style="max-width:560px"><strong>Where to notify you</strong>
       <form method="POST" action="/settings">
