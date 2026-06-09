@@ -3,11 +3,14 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-06-01",
   "observability": { "enabled": true },
+  "routes": [
+    { "pattern": "ping.mgm-llc.org", "custom_domain": true }
+  ],
   "d1_databases": [
-    { "binding": "DB", "database_name": "agentping", "database_id": "REPLACE_AFTER_D1_CREATE" }
+    { "binding": "DB", "database_name": "agentping", "database_id": "fd90d38e-85b9-4b42-8128-8e666915986c" }
   ],
   "vars": {
     "FROM_EMAIL": "AgentPing <noreply@mgm-llc.org>",
-    "APP_URL": "http://localhost:8787"
+    "APP_URL": "https://ping.mgm-llc.org"
   }
 }
