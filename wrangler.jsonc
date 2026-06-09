@@ -11,6 +11,8 @@
   ],
   "vars": {
     "FROM_EMAIL": "AgentPing <noreply@mgm-llc.org>",
-    "APP_URL": "https://ping.mgm-llc.org"
+    "APP_URL": "https://ping.mgm-llc.org",
+    "STRIPE_PRICE_ID": "price_1TgJPmPCEoEl6DCpjj5Gf6Hc",
+    "STRIPE_PRICE_ID_ANNUAL": "price_1TgJQXPCEoEl6DCpxSeiRXk4"
   }
 }
