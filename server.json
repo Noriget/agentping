@@ -1,0 +1,25 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.Noriget/agentping",
+  "description": "Let your AI agent notify you by email, Slack, Discord, or webhook. One tool: send_notification.",
+  "version": "1.0.0",
+  "repository": {
+    "url": "https://github.com/Noriget/agentping",
+    "source": "github"
+  },
+  "websiteUrl": "https://ping.mgm-llc.org",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://ping.mgm-llc.org/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer <api_key> — get a free key at https://ping.mgm-llc.org/signup",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
