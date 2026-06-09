@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   slack_webhook TEXT,
   discord_webhook TEXT,
   webhook_url TEXT,
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
   created_at INTEGER NOT NULL
 );
 

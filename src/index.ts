@@ -7,10 +7,15 @@ type Env = {
   FROM_EMAIL: string;
   APP_URL: string;
   RESEND_API_KEY?: string;
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_PRICE_ID?: string;
+  STRIPE_PRICE_ID_ANNUAL?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
 };
 
 const app = new Hono<{ Bindings: Env; Variables: { uid: number } }>();
 const FREE_NOTIF_MONTH = 100;
+const PRO_NOTIF_MONTH = 10000;
 
 // ---------- helpers ----------
 const enc = new TextEncoder();
@@ -91,6 +96,20 @@ async function deliver(env: Env, user: any, title: string, message: string, chan
   return sent;
 }
 
+// ---------- stripe ----------
+async function hmacHex(secret: string, data: string) {
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return hex(await crypto.subtle.sign('HMAC', key, enc.encode(data)));
+}
+async function stripeApi(env: Env, path: string, params: Record<string, string>) {
+  const r = await fetch('https://api.stripe.com/v1/' + path, { method: 'POST', headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params) });
+  return r.json() as any;
+}
+async function notifCount(env: Env, uid: number) {
+  const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id=? AND created_at>?').bind(uid, Date.now() - 30 * 864e5).first<any>();
+  return (r && r.n) || 0;
+}
+
 // =================== MARKETING / AUTH / DASHBOARD ===================
 app.get('/', async (c) => {
   if (await readToken(c.env.APP_SECRET, getCookie(c, 'ap_session'))) return c.redirect('/dashboard');
@@ -161,9 +180,15 @@ app.get('/dashboard', requireAuth, async (c) => {
   const cnt = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id=? AND created_at>?').bind(u.id, since).first<any>();
   const recent = await c.env.DB.prepare('SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 10').bind(u.id).all();
   const recentRows = (recent.results || []).map((n: any) => `<div class="muted" style="font-size:13px">${new Date(n.created_at).toLocaleString('en-US')} · ${esc(n.channel)} · ${esc(n.title)}</div>`).join('') || '<span class="muted">No notifications yet.</span>';
+  const isPro = u.plan === 'pro';
+  const cap = isPro ? PRO_NOTIF_MONTH : FREE_NOTIF_MONTH;
+  const used = (cnt && cnt.n) || 0;
+  const billing = isPro
+    ? `<form method="POST" action="/billing/portal" style="margin-top:8px"><button class="btn ghost">Manage billing</button></form>`
+    : `<form method="POST" action="/billing/checkout" style="display:inline-block;margin-top:8px"><button class="btn">Upgrade to Pro — $9/mo</button></form> <form method="POST" action="/billing/checkout?plan=annual" style="display:inline-block;margin-left:8px"><button class="btn ghost">Annual $90/yr</button></form>`;
   return c.html(layout('Dashboard', `
     <h1>Dashboard</h1>
-    <div class="card"><strong>Plan: ${u.plan === 'pro' ? 'Pro' : 'Free'}</strong> <span class="muted">— ${(cnt && cnt.n) || 0}/${FREE_NOTIF_MONTH} notifications (last 30 days)</span></div>
+    <div class="card"><strong>Plan: ${isPro ? 'Pro' : 'Free'}</strong> <span class="muted">— ${used}/${cap} notifications (30d)</span><br>${billing}</div>
     <div class="card"><strong>Your MCP key</strong>
       <pre>${esc(u.api_key)}</pre>
       <form method="POST" action="/regenerate-key" onsubmit="return confirm('Regenerate key? Old key stops working.')"><button class="btn ghost" type="submit">Regenerate key</button></form>
@@ -241,11 +266,12 @@ async function handleRpc(c: any, user: any, msg: any): Promise<any | null> {
     const message = String(args.message || '').slice(0, 4000);
     const channel = ['all', 'email', 'slack', 'discord', 'webhook'].includes(args.channel) ? args.channel : 'all';
     if (!title) return rpcOk(id, { content: [{ type: 'text', text: 'Error: title is required.' }], isError: true });
-    // free monthly cap
-    const since = Date.now() - 30 * 864e5;
-    const cnt = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id=? AND created_at>?').bind(user.id, since).first<any>();
-    if (user.plan !== 'pro' && cnt && cnt.n >= FREE_NOTIF_MONTH) {
-      return rpcOk(id, { content: [{ type: 'text', text: `Monthly free limit (${FREE_NOTIF_MONTH}) reached. Upgrade to Pro for more.` }], isError: true });
+    // monthly cap (plan-aware)
+    const cap = user.plan === 'pro' ? PRO_NOTIF_MONTH : FREE_NOTIF_MONTH;
+    const used = await notifCount(c.env, user.id);
+    if (used >= cap) {
+      const text = user.plan === 'pro' ? `Monthly limit (${PRO_NOTIF_MONTH}) reached.` : `Free limit (${FREE_NOTIF_MONTH}/month) reached. Upgrade to Pro at ${c.env.APP_URL}/dashboard.`;
+      return rpcOk(id, { content: [{ type: 'text', text }], isError: true });
     }
     const sent = await deliver(c.env, user, title, message, channel);
     await c.env.DB.prepare('INSERT INTO notifications (user_id,channel,title,created_at) VALUES (?,?,?,?)').bind(user.id, sent.join(',') || 'none', title, Date.now()).run();
@@ -280,5 +306,45 @@ app.post('/mcp', async (c) => {
   return c.json(r);
 });
 app.get('/mcp', (c) => c.text('AgentPing MCP endpoint. Use POST (Streamable HTTP) with Authorization: Bearer <key>.', 405));
+
+// ----- billing (Stripe) -----
+app.post('/billing/checkout', requireAuth, async (c) => {
+  if (!c.env.STRIPE_SECRET_KEY || !c.env.STRIPE_PRICE_ID) return c.html(layout('Billing', `<div class="card">Billing is not configured yet. <a href="/dashboard">Back</a></div>`, true));
+  const u = await getUser(c.env, c.get('uid'));
+  const price = c.req.query('plan') === 'annual' && c.env.STRIPE_PRICE_ID_ANNUAL ? c.env.STRIPE_PRICE_ID_ANNUAL : c.env.STRIPE_PRICE_ID;
+  const s = await stripeApi(c.env, 'checkout/sessions', {
+    mode: 'subscription', 'line_items[0][price]': price, 'line_items[0][quantity]': '1',
+    success_url: `${c.env.APP_URL}/billing/success`, cancel_url: `${c.env.APP_URL}/dashboard`,
+    client_reference_id: String(u.id), customer_email: u.email, allow_promotion_codes: 'true',
+  });
+  if (s && s.url) return c.redirect(s.url, 303);
+  return c.html(layout('Billing', `<div class="card">Could not start checkout. <a href="/dashboard">Back</a></div>`, true));
+});
+app.post('/billing/portal', requireAuth, async (c) => {
+  const u = await getUser(c.env, c.get('uid'));
+  if (!c.env.STRIPE_SECRET_KEY || !u?.stripe_customer_id) return c.redirect('/dashboard');
+  const p = await stripeApi(c.env, 'billing_portal/sessions', { customer: u.stripe_customer_id, return_url: `${c.env.APP_URL}/dashboard` });
+  return c.redirect(p && p.url ? p.url : '/dashboard', 303);
+});
+app.get('/billing/success', requireAuth, (c) => c.html(layout('Welcome to Pro', `<div class="card"><h1>🎉 You're on Pro!</h1><p class="muted">Activation may take a few seconds.</p><a class="btn" href="/dashboard">Dashboard</a></div>`, true)));
+app.post('/stripe/webhook', async (c) => {
+  const secret = c.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) return c.text('webhook not configured', 503);
+  const body = await c.req.text();
+  const parts = Object.fromEntries((c.req.header('Stripe-Signature') || '').split(',').map((p) => p.split('=')));
+  if (!parts.v1 || parts.v1 !== (await hmacHex(secret, `${parts.t}.${body}`))) return c.text('bad signature', 400);
+  let ev: any; try { ev = JSON.parse(body); } catch { return c.text('bad json', 400); }
+  const o = ev?.data?.object || {};
+  try {
+    if (ev.type === 'checkout.session.completed' && o.client_reference_id) {
+      await c.env.DB.prepare('UPDATE users SET plan=?,stripe_customer_id=?,stripe_subscription_id=? WHERE id=?').bind('pro', o.customer || '', o.subscription || '', Number(o.client_reference_id)).run();
+    } else if (ev.type === 'customer.subscription.deleted') {
+      await c.env.DB.prepare('UPDATE users SET plan=? WHERE stripe_customer_id=?').bind('free', o.customer || '').run();
+    } else if (ev.type === 'customer.subscription.updated') {
+      await c.env.DB.prepare('UPDATE users SET plan=? WHERE stripe_customer_id=?').bind(['active', 'trialing', 'past_due'].includes(o.status) ? 'pro' : 'free', o.customer || '').run();
+    }
+  } catch {}
+  return c.json({ received: true });
+});
 
 export default app;
