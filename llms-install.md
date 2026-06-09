@@ -14,22 +14,7 @@ Ask the user to paste their API key. Do not invent one — the server rejects un
 
 ## Step 2 — Add the MCP server config
 
-Add this to the user's MCP settings (`cline_mcp_settings.json`):
-
-```json
-{
-  "mcpServers": {
-    "agentping": {
-      "url": "https://ping.mgm-llc.org/mcp",
-      "headers": { "Authorization": "Bearer <USER_API_KEY>" }
-    }
-  }
-}
-```
-
-Replace `<USER_API_KEY>` with the key from Step 1.
-
-If this Cline build does not support remote (`url`) servers, use the stdio bridge instead (requires Node.js):
+**Recommended for Cline (stdio bridge, requires Node.js).** Cline may try to open a bare `url` as an SSE stream, which this Streamable-HTTP server does not serve; the `mcp-remote` bridge avoids that. Add to `cline_mcp_settings.json`:
 
 ```json
 {
@@ -37,6 +22,22 @@ If this Cline build does not support remote (`url`) servers, use the stdio bridg
     "agentping": {
       "command": "npx",
       "args": ["-y", "mcp-remote", "https://ping.mgm-llc.org/mcp", "--header", "Authorization: Bearer <USER_API_KEY>"]
+    }
+  }
+}
+```
+
+Replace `<USER_API_KEY>` with the actual key from Step 1 (e.g. `ap_...`). Do **not** leave placeholder text — a non-ASCII value in the header throws a `ByteString` error.
+
+Alternatively, if this Cline build natively supports Streamable HTTP, the direct form works:
+
+```json
+{
+  "mcpServers": {
+    "agentping": {
+      "type": "streamableHttp",
+      "url": "https://ping.mgm-llc.org/mcp",
+      "headers": { "Authorization": "Bearer <USER_API_KEY>" }
     }
   }
 }
