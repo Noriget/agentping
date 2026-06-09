@@ -62,7 +62,7 @@ function layout(title: string, body: string, user?: boolean) {
     code,pre{background:#0f172a;color:#e2e8f0;border-radius:8px;font-size:13px}code{padding:2px 6px}pre{padding:14px;overflow:auto;white-space:pre}
     main{padding:24px 0 60px}
   </style></head><body>
-  <header class="nav"><div class="wrap"><a class="logo" href="/">Agent<b>Ping</b></a><nav>${user ? '<a href="/dashboard">Dashboard</a> &nbsp; <a href="/logout">Log out</a>' : '<a href="/login">Log in</a> &nbsp; <a class="btn" href="/signup">Sign up free</a>'}</nav></div></header>
+  <header class="nav"><div class="wrap"><a class="logo" href="/">Agent<b>Ping</b></a><nav><a href="/docs">Docs</a> &nbsp; ${user ? '<a href="/dashboard">Dashboard</a> &nbsp; <a href="/logout">Log out</a>' : '<a href="/login">Log in</a> &nbsp; <a class="btn" href="/signup">Sign up free</a>'}</nav></div></header>
   <main><div class="wrap">${body}</div></main>
   <footer style="border-top:1px solid var(--border);background:#fff"><div class="wrap" style="padding:18px;font-size:13px;color:var(--muted)"><a href="/">Home</a> · <a href="/signup">Sign up</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · © ${new Date().getFullYear()} AgentPing · MGM LLC</div></footer>
   </body></html>`;
@@ -130,6 +130,9 @@ app.get('/', async (c) => {
     </div>
     <h2>Why AgentPing</h2>
     <ul class="muted"><li>One tool: <code>send_notification(title, message, channel)</code></li><li>Email · Slack · Discord · custom webhook</li><li>Free tier — ${FREE_NOTIF_MONTH} notifications/month</li><li>Private: your destinations stay in your account</li></ul>
+    <h2>Example uses</h2>
+    <ul class="muted"><li>"Email me when the deployment finishes."</li><li>"Ping Slack if the scraper hits an error."</li><li>"Send me the summary when the research is done."</li><li>"Ask for my approval before spending money."</li></ul>
+    <p><a class="btn" href="/signup">Get started free</a> &nbsp; <a href="/docs">Read the docs →</a></p>
   `));
 });
 
@@ -345,6 +348,80 @@ app.post('/stripe/webhook', async (c) => {
     }
   } catch {}
   return c.json({ received: true });
+});
+
+// ----- docs -----
+app.get('/docs', (c) => {
+  const url = `${c.env.APP_URL}/mcp`;
+  return c.html(layout('Docs — set up AgentPing', `
+    <h1>AgentPing documentation</h1>
+    <p class="muted">Give your AI agent a <code>send_notification</code> tool so it can reach you by email, Slack, Discord, or webhook.</p>
+
+    <h2>Quickstart</h2>
+    <ol class="muted">
+      <li><a href="/signup">Sign up</a> and copy your API key from the <a href="/dashboard">dashboard</a>.</li>
+      <li>Set at least one destination (email is set to your account email by default).</li>
+      <li>Add AgentPing to your MCP client (below). Your agent now has <code>send_notification</code>.</li>
+    </ol>
+
+    <h2>Connect your MCP client</h2>
+    <p class="muted">Most clients support remote MCP servers. Use your API key as a Bearer token.</p>
+    <p><strong>A. Direct remote URL</strong> (Cursor, and clients that support Streamable HTTP):</p>
+    <pre>{
+  "mcpServers": {
+    "agentping": {
+      "url": "${esc(url)}",
+      "headers": { "Authorization": "Bearer YOUR_API_KEY" }
+    }
+  }
+}</pre>
+    <p><strong>B. Stdio bridge</strong> (for clients that only support local servers, e.g. some Claude Desktop setups):</p>
+    <pre>{
+  "mcpServers": {
+    "agentping": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "${esc(url)}", "--header", "Authorization: Bearer YOUR_API_KEY"]
+    }
+  }
+}</pre>
+    <h3>Per-client notes</h3>
+    <ul class="muted">
+      <li><strong>Cursor</strong>: add the JSON (form A) to <code>~/.cursor/mcp.json</code> or project <code>.cursor/mcp.json</code>.</li>
+      <li><strong>Claude Desktop</strong>: Settings → Developer → Edit Config → add form B (mcp-remote), then restart.</li>
+      <li><strong>Cline / VS Code</strong>: open the MCP Servers panel → Add server → paste form A (URL + header) or form B.</li>
+      <li><strong>Any other MCP client</strong>: use form A if it accepts a URL + headers; otherwise the form B bridge works everywhere.</li>
+    </ul>
+
+    <h2>Set up your notification channels</h2>
+    <ul class="muted">
+      <li><strong>Email</strong> — set in your dashboard (defaults to your account email).</li>
+      <li><strong>Slack</strong> — create an Incoming Webhook at api.slack.com/apps → your app → Incoming Webhooks → Add to Workspace, then paste the URL in the dashboard.</li>
+      <li><strong>Discord</strong> — Server Settings → Integrations → Webhooks → New Webhook → Copy URL, then paste it in the dashboard.</li>
+      <li><strong>Custom webhook</strong> — any HTTPS URL; we POST JSON <code>{ title, message, at }</code>.</li>
+    </ul>
+
+    <h2>Tool reference</h2>
+    <div class="card"><strong>send_notification(title, message?, channel?)</strong>
+      <ul class="muted">
+        <li><code>title</code> (string, required) — short subject.</li>
+        <li><code>message</code> (string, optional) — body text.</li>
+        <li><code>channel</code> (optional) — <code>all</code> (default) | <code>email</code> | <code>slack</code> | <code>discord</code> | <code>webhook</code>.</li>
+      </ul>
+      <p class="muted">Returns a confirmation of which channels were used.</p>
+    </div>
+
+    <h2>FAQ</h2>
+    <div class="card"><strong>What does it cost?</strong><p class="muted">Free: ${FREE_NOTIF_MONTH} notifications/month. Pro ($9/mo or $90/yr): ${PRO_NOTIF_MONTH}/month.</p></div>
+    <div class="card"><strong>Can the agent read my data?</strong><p class="muted">No. AgentPing only sends notifications you trigger. It has no read access to your inbox or accounts.</p></div>
+    <div class="card"><strong>Which clients work?</strong><p class="muted">Any MCP-compatible client (Claude, Cursor, Cline, and others). Use the stdio bridge (form B) for maximum compatibility.</p></div>
+    <p><a class="btn" href="/signup">Get your API key — free</a></p>
+  `));
+});
+
+app.get('/robots.txt', (c) => c.text(`User-agent: *\nAllow: /\nSitemap: ${c.env.APP_URL}/sitemap.xml\n`));
+app.get('/sitemap.xml', (c) => {
+  const urls = ['/', '/docs', '/signup', '/terms', '/privacy'];
+  return c.body(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${c.env.APP_URL}${u}</loc></url>`).join('\n')}\n</urlset>`, 200, { 'Content-Type': 'application/xml' });
 });
 
 export default app;
