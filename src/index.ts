@@ -129,7 +129,10 @@ app.get('/', async (c) => {
       <p class="muted">Then your agent has a <code>send_notification</code> tool. Works with Claude, Cursor, and any MCP-compatible client.</p>
     </div>
     <h2>Why AgentPing</h2>
-    <ul class="muted"><li>One tool: <code>send_notification(title, message, channel)</code></li><li>Email · Slack · Discord · custom webhook</li><li>Free tier — ${FREE_NOTIF_MONTH} notifications/month</li><li>Private: your destinations stay in your account</li></ul>
+    <ul class="muted"><li>One tool: <code>send_notification(title, message, channel)</code></li><li>Email · Slack · Discord · custom webhook</li><li>Private: your destinations stay in your account</li></ul>
+    <h2>Pricing</h2>
+    <div class="card"><strong>Free</strong> — <span class="muted">${FREE_NOTIF_MONTH} notifications/month, all channels (email/Slack/Discord/webhook).</span></div>
+    <div class="card"><strong>Pro — $9/mo or $90/yr</strong><ul class="muted" style="margin:6px 0 0"><li><strong>${PRO_NOTIF_MONTH.toLocaleString()} notifications/month</strong> (100× Free)</li><li>For agents that run at scale, around the clock</li><li>Priority email support</li></ul></div>
     <h2>Example uses</h2>
     <ul class="muted"><li>"Email me when the deployment finishes."</li><li>"Ping Slack if the scraper hits an error."</li><li>"Send me the summary when the research is done."</li><li>"Ask for my approval before spending money."</li></ul>
     <p><a class="btn" href="/signup">Get started free</a> &nbsp; <a href="/docs">Read the docs →</a></p>
@@ -188,7 +191,9 @@ app.get('/dashboard', requireAuth, async (c) => {
   const used = (cnt && cnt.n) || 0;
   const billing = isPro
     ? `<form method="POST" action="/billing/portal" style="margin-top:8px"><button class="btn ghost">Manage billing</button></form>`
-    : `<form method="POST" action="/billing/checkout" style="display:inline-block;margin-top:8px"><button class="btn">Upgrade to Pro — $9/mo</button></form> <form method="POST" action="/billing/checkout?plan=annual" style="display:inline-block;margin-left:8px"><button class="btn ghost">Annual $90/yr</button></form>`;
+    : `<p class="muted" style="margin:10px 0 4px"><strong>Upgrade to Pro ($9/mo or $90/yr) for:</strong></p>
+       <ul class="muted" style="margin:0 0 10px"><li><strong>${PRO_NOTIF_MONTH.toLocaleString()} notifications/month</strong> — 100× the Free tier (${FREE_NOTIF_MONTH}/mo)</li><li>Never miss an alert when an agent runs at scale</li><li>Priority email support</li></ul>
+       <form method="POST" action="/billing/checkout" style="display:inline-block"><button class="btn">Upgrade to Pro — $9/mo</button></form> <form method="POST" action="/billing/checkout?plan=annual" style="display:inline-block;margin-left:8px"><button class="btn ghost">Annual $90/yr</button></form>`;
   return c.html(layout('Dashboard', `
     <h1>Dashboard</h1>
     <div class="card"><strong>Plan: ${isPro ? 'Pro' : 'Free'}</strong> <span class="muted">— ${used}/${cap} notifications (30d)</span><br>${billing}</div>
