@@ -15,6 +15,10 @@
   <a href="https://ping.mgm-llc.org/signup">Get an API key (free)</a>
 </p>
 
+<p align="center">
+  <a href="https://ping.mgm-llc.org/signup"><b>▶ Get your free API key → ping.mgm-llc.org/signup</b></a>
+</p>
+
 ---
 
 ## What it does
